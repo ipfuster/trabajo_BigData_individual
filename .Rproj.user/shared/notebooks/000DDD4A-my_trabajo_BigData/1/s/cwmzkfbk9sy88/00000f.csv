@@ -1,0 +1,15 @@
+"0","#| out-width: 80%"
+"0",""
+"0","#niños"
+"0","refugiados_datos <- rio::import(""./datos/refugees_origin_country.csv"")"
+"2","Registered S3 method overwritten by 'data.table':
+  method           from
+  print.data.table     
+"
+"0","refugiados <- refugiados_datos |> "
+"0","  filter(`REF_AREA:Geographic area` == ""WORLD: World"") |> "
+"0","  group_by(`TIME_PERIOD:Time period`) |> "
+"0","  summarise(total_refugiados = sum(`OBS_VALUE:Observation Value`))"
+"2","Error en summarise(group_by(filter(refugiados_datos, `REF_AREA:Geographic area` == : 
+  no se pudo encontrar la función ""summarise""
+"

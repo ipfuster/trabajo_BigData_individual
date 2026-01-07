@@ -1,0 +1,460 @@
+---
+title: "Conflictos bélicos"
+description: |
+  Conflictos bélicos y sus consecuencias
+author:
+  - name: Isabel Punter Fuster
+    affiliation:
+     - name: Universitat de València
+       url: https://www.uv.es
+     - name: Junior Female Leaders 
+       url: https://juniorfemaleleaders.wixsite.com/juniorfemaleleaders
+      
+date: 2025-01-05                          
+categories: [trabajo BigData, conflictos, guerras]  
+image: "./imagenes/mundo.jpg"
+title-block-banner: "#698B69"
+title-block-banner-color: "white"     
+toc-depth: 3
+smooth-scroll: true
+format: 
+  html:
+    link-external-newwindow: true
+    code-overflow: scroll
+
+code-tools: true
+code-link: true
+---
+
+::: {.callout-tip collapse="true" icon="false" title="Código y fuentes del trabajo"}
+En el presente trabajo se utilizará información de la Universidad de Uppsala, que se encuentra dentro de la carpeta "datos". Asimismo, otras fuentes son ACHNUR, ACLED y UNICEF, cuyos ficheros también están dentro de esa misma carpeta.
+
+El código esta basado mayoritariamente en todo lo visto en clase. A continuación se cargan todas las librerías que se van a utilizar
+:::
+
+```{r}
+library(tidyverse)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(countrycode)
+library(ggplot2)
+library(tmap)
+library(patchwork)
+library(ggimage)
+library(imager)
+```
+
+------------------------------------------------------------------------
+
+## Introducción
+
+El sistema internacional actual atraviesa su periodo de mayor inestabilidad desde el fin de la Segunda Guerra Mundial. La convergencia de tensiones geopolíticas, la fragmentación de actores no estatales y la mutación de la violencia política han situado al año 2025 en la cúspide de la conflictividad global. Más allá de los focos mediáticos en Ucrania y Gaza, la proliferación de crisis en el Sahel, el Sudeste Asiático y América Latina dibuja un mapa de seguridad complejo que exige un análisis basado en la evidencia.
+
+Aquí utilizo técnicas de Big Data y R para monitorizar esta escalada, analizando datos multidimensionales de la Universidad de Uppsala (UCDP), ACLED y organismos de la ONU para cuantificar y mapear no solo la letalidad directa, sino las profundas consecuencias humanitarias en términos de desplazamientos forzosos y refugiados.
+
+![](./imagenes/introduccion.png){fig-align="center" width="40%"}
+
+A continuación, un mapa que representa las regiones en conflicto bélico, según los datos de la Universidad de Uppsala (UCDP), mundialmente reconocida por sus análisis de conflictos y acción humanitaria.
+
+::: callout
+Son datos de 2024, porque es el año más reciente que aparece en los datos.
+:::
+
+Debido a que se trata de una ciencia social, hay disparidades de cuantificación y de definición de conflicto armado. Bajo la UCDP, el conflicto bélico se da cuando "hay una incompatibilidad disputada que concierne al gobierno y/o territorio, donde el uso de la fuerza armada entre dos partes, de las cuales al menos una es el gobierno de un Estado, provoca al menos 25 muertes relacionadas con combates en un año calendario".
+
+::: {.callout-tip collapse="true" icon="false" title="Explicación código"}
+Para este gráfico he importado los datos con rio y después he juntado el sf World con el df de conflicto previamente importado para poder tener las geometrías. Para poder rellenar los países en función de si hay conflicto o no, he creado una columna con código binario mediante un ifelse, donde 0 es que no hay (previamente está como NA porque los países que no están en conflicto tienen todo NA por el left_join anterior), y 1 es que sí hay. Después hago el mapa bajo el procedimiento del fichero CIS del guion_03.
+:::
+
+```{r}
+
+#importo el archivo de UPC de conflictos
+
+conflictos_upc1 <- rio::import("./datos/conflictos_pais_ano.csv")
+
+#modifico para obtener lo que quiero
+
+conflictos_upc2 <- conflictos_upc1 |> 
+  filter(year == 2024) |> 
+  mutate(nombre = countrycode(location, "country.name", "iso3c"))
+
+World_mio <- World |> 
+  select(iso_a3, geometry)
+
+conflictos_upc_mundial <- World_mio |> 
+  left_join(conflictos_upc2, by = c("iso_a3" = "nombre"))
+
+conflictos_paises <- conflictos_upc_mundial |> 
+  mutate(Conflicto = factor(ifelse(!is.na(conflict_id) & conflict_id > 0, 1, 0))) |> 
+  filter(iso_a3 != "ATA")
+
+conflictos_upc_sf <- st_as_sf(conflictos_paises)
+
+#hago el mapa
+
+mapa_conflictos_2024 <- ggplot(conflictos_upc_sf) +
+  geom_sf(aes(fill=Conflicto), color="#3D3D3D") +
+  scale_fill_manual(values = c("0" = "grey80", "1" = "darkred"),  
+                    labels = c("0" = "No", "1" = "Sí")) +
+  labs(title = "Países en conflicto en 2024", 
+       caption = "Fuente: UCDP") +
+  coord_sf(datum = NA) + 
+  theme_minimal()
+
+mapa_conflictos_2024
+
+```
+
+Debido al aumento de la violencia, considero necesario analizar los conflictos, desde una perspectiva anto histórica, como en términos de las consecuencias que conllevan, ya no solo por migraciones, desplazamientos y muertes, sino a nivel económico.
+
+------------------------------------------------------------------------
+
+## Actores involucrados
+
+Los conflictos no se dan únicamente porque dos países están en guerra. La realidad es muy diferente. Hay una gran variedad de conflictos, entre cuyas distinciones mencionaré una más adelante, en los que se ven involucrados diferentes tipos de actores, desde ejércitos estatales hasta guerrillas o grupos terroristas. En cualquier caso, las consecuencias son enormes.
+
+### Caso de estudio: Sudán
+
+Para poner un ejemplo de los actores que intervienen en un conflicto, a continuación una tabla de los actores que intervienen en Sudán.
+
+```{r}
+
+library(gt)
+
+actores_upcd <- rio::import("./datos/Actor_v25_1.csv")
+
+actores <- actores_upcd |> 
+  filter(Location == "Sudan") |> 
+  select(NameData, NameOrigFullEng) |> 
+  filter(NameData %in% c("PDF", "RSF", "SSLM", "SLM/A - MM", "Beni Hussein", "Fur", "Sudanese Communist Party", "NDA",   "Darfur Joint Resistance Forces", "SARC"))
+
+actores_gt <- actores |> gt()
+
+actores_gt <- actores_gt |> 
+  tab_header(title = "Actores involucrados en el conflicto de Sudán") |> 
+  tab_options(heading.background.color = "darkred", 
+              column_labels.border.bottom.color = "darkred", 
+              table_body.border.bottom.color = "darkred") |> 
+  cols_label(NameData = md("Abreviatura"), 
+             NameOrigFullEng = md("Nombre completo")) |> 
+  tab_style(style = cell_fill(color = "#C1FFC1"), 
+            locations = cells_body(columns = NameData, rows = c(5, 10))) |> 
+  tab_style(style = cell_fill(color = "#CDB79C"), 
+            locations = cells_body(columns = NameData, rows = c(1, 4))) |> 
+  tab_style(style = cell_fill(color = "lightgrey"), 
+            locations = cells_body(columns = NameData, rows = c(6, 7))) |> 
+  tab_style(style = cell_fill(color = "#FFFFF0"), 
+            locations = cells_body(columns = NameData, rows = c(2, 3))) |> 
+  tab_style(style = cell_fill(color = "#CD9B9D"), 
+            locations = cells_body(columns = NameData, rows = c(8, 9))) |> 
+  tab_footnote(footnote = "Es una selección del total para mostrar la variedad", 
+               locations = cells_title()) |> 
+  tab_footnote(footnote = "Tipos de actores: fuerzas estatales (verde), grupos rebeldes (marrón),  milicias étnicas (gris), movimientos políticos (beige), alianzas (granate)",
+               locations = cells_column_labels(columns = NameData)) |> 
+  tab_source_note(md("Fuente: [UCDP Dataset](https://ucdp.uu.se/downloads/index.html#actor)"))
+
+actores_gt
+
+```
+
+El caso de Sudán demuestra que las guerras civiles del siglo XXI rara vez se libran únicamente dentro de las fronteras nacionales. Lo que comenzó como una lucha de poder entre dos generales (Al-Burhan y "Hemedti") se ha transformado en una guerra subsidiaria (proxy war) donde potencias regionales y globales juegan sus propias cartas estratégicas.
+
+Mientras en el terreno combaten fuerzas estatales como las SAF y paramilitares como las RSF, apoyadas por una compleja red de milicias étnicas y grupos rebeldes, el conflicto es alimentado desde el exterior por potencias como los Emiratos Árabes Unidos, Egipto, Irán o Rusia a través del Grupo Wagner (del cual hablo en este [artículo](https://www.linkedin.com/pulse/berlin-conference-20-neocolonialism-africa-isabel-p-fuster-wcxje) ). Estos actores externos no solo proveen armamento y financiación a cambio de recursos estratégicos como el oro o el control del Mar Rojo, sino que transforman una lucha de poder local en una guerra subsidiaria, lo que dificulta las soluciones diplomáticas y perpetúa la violencia más allá de las fronteras sudanesas.
+
+------------------------------------------------------------------------
+
+## Desplazamientos y fallecimientos
+
+### Fallecimientos por combate directo
+
+Puesto que ha aumentado el número de conflictos, también vemos un aumento de fallecimientos directos debido a combates. A continuación, un gráfico que representa el número de fallecimientos directos por causa de combate, no se incluye todas las muertes indirectas de guerra (hambre, enfermedades, desplazamiento).
+
+```{r}
+#importo datos
+muertes_guerra_datos <- rio::import("./datos/muertes_guerras.csv")
+
+#calculo lo que me interesa
+muertes_guerra <- muertes_guerra_datos |> 
+  group_by(year) |> 
+  summarise(total_muertes_anio_est = sum(bd_best), 
+            total_muertes_anio_max = sum(bd_high))
+
+#gráfico
+options(scipen = 999)
+
+
+ggplot(muertes_guerra) +
+  geom_line(aes(x = year, y = total_muertes_anio_max), color = "#CD9B9D", alpha = 0.8) +
+  geom_line(aes(x = year, y = total_muertes_anio_est), color = "darkred") +
+  labs(title = "Evolución del número de fallecimientos por guerras", 
+       subtitle = "Debido a combate directo", 
+       caption = "*Nota: La estimación más precisa es la más oscura, y la clara la máxima posible\nFuente = UPCD", 
+       y = "Nº total de fallecimientos", 
+       x = " ") +
+  scale_y_continuous(breaks = seq(0, 410000, 50000)) + 
+  scale_x_continuous(breaks = seq(0, 2024, 5)) + 
+  theme_minimal()
+
+```
+
+Se observan ciertas oscilaciones en el volumen de muertes. Durante la década de los noventa se produjeron varios conflictos que explican el aumento de víctimas, entre ellos la Guerra del Golfo (1990–1991), los conflictos en la ex-Yugoslavia (1991–1999) y el genocidio de Ruanda (1994). Entre 2000 y 2010 se registra una relativa disminución de guerras armadas; sin embargo, a pesar de no reflejarse plenamente en los registros, se estaban produciendo guerras civiles en África Central. A partir de 2010 se aprecia un nuevo repunte, provocado por los conflictos en Siria y Libia, así como por el aumento de la violencia de grupos no estatales como ISIS y Boko Haram. Finalmente, desde 2020 se observa un fuerte incremento, impulsado por el conflicto en Ucrania, la intensificación de guerras civiles en África en países del Sahel y de África Central, como Sudán, Tigray en Etiopía o Mozambique, lo cual también se refleja en el mapa del apartado anterior, y la persistencia de conflictos en Oriente Medio, como Siria, Yemen, e Israel y Palestina.
+
+### Refugiados
+
+Otro dato alarmante es el volumen de refugiados. No obstante, cabe destacar que un refugiado no se desplaza únicamente por una guerra, pueden darse varios motivos que se aluden bajo el derecho internacional.
+
+::: callout
+REFUGIADO: persona que se encuentra fuera de su país de nacionalidad o residencia habitual y que no puede o no quiere acogerse a la protección de dicho país debido a un temor fundado de ser perseguida por motivos de raza, religión, nacionalidad, pertenencia a un grupo social determinado u opiniones políticas, según lo establece la Convención sobre el Estatuto de los Refugiados de 1951 y su Protocolo de 1967; esta definición jurídica le otorga derechos específicos, como la protección contra la devolución forzosa a su país de origen (principio de non-refoulement), así como acceso a asistencia básica, educación y trabajo en el país de asilo.
+:::
+
+```{r}
+#| out-width: 80%
+
+#niños
+refugiados_datos <- rio::import("./datos/refugees_origin_country.csv")
+
+refugiados <- refugiados_datos |> 
+  filter(`REF_AREA:Geographic area` == "WORLD: World") |> 
+  group_by(`TIME_PERIOD:Time period`) |> 
+  summarise(total_refugiados = sum(`OBS_VALUE:Observation Value`))
+
+
+p1 <- ggplot(refugiados, aes(x = `TIME_PERIOD:Time period`, y = total_refugiados)) + 
+  geom_line(color="darkred") +
+  labs(title = "Evolución del número de refugiados", 
+       subtitle = "Niños por país de origen", 
+       caption = "*Nota: Niños es menor de 17 años \nFuente: UNICEF Data Warehouse", 
+       y = " ", 
+       x = " ") +
+  scale_x_continuous(breaks = seq(0, 2024, 5)) + 
+  theme_minimal()
+
+
+options(scipen = 999)
+
+
+#total
+refugiados_total <- rio::import("./datos/persons_of_concern.csv")
+
+p2 <- ggplot(refugiados_total, aes(x = Year, y = Refugees)) + 
+  geom_line(color="darkred") +
+  labs(subtitle = "Total por país de origen", 
+       caption = "Fuente: UNHCR", 
+       y = " ", 
+       x = " ") +
+  scale_x_continuous(breaks = seq(1990, 2025, 10)) + 
+  theme_minimal()
+
+
+p1 + p2
+```
+
+En cuanto a la evolución de niños refugiados, observamos que hasta el año 2011, la cifra se mantenía relativamente estable. Sin embargo, a partir de ese momento, el gráfico muestra un crecimiento exponencial. El principal detonante fue la Guerra Civil en Siria, que generó millones de desplazados en muy poco tiempo, sumado a la inestabilidad derivada de las "Primaveras Árabes" en otros países de la región. El notable incremento en el número de refugiados, especialmente a partir de 2012, responde a una acumulación de crisis humanitarias donde los conflictos antiguos no se resuelven y surgen nuevos focos de violencia masiva. A los conflictos meniconados, se sumaron el colapso socioeconómico en Venezuela y crisis persistentes en países como Afganistán y la República Democrática del Congo.
+
+El salto vertical más reciente observado en el gráfico se debe principalmente a la invasión de Ucrania en 2022, evidenciando un escenario global donde la velocidad del desplazamiento forzado supera por mucho la capacidad de retorno o reasentamiento de las poblaciones afectadas, junto a los conflictos en el Sahel, que están en un auge constante desde la salida de las tropas europeas, principalmente francesas, en 2022, y el posterior apoyo a régimenes débiles por parte de Rusia, entre otros actores.
+
+En relación al volumen total de refugiados a nivel global, vemos como disminuye hasta mediados de la decada de los 2000 y su continuo aumento hasta el pico máximo alcanzado en el año 2023, coincidiendo con la intensificación de las crisis en Ucrania y Sudán. Sin embargo, se observa una ligera tendencia a la baja hacia finales de 2024 y proyecciones de 2025. Este descenso no necesariamente implica una resolución de los conflictos, sino que puede reflejar cambios en el estatus legal de ciertas poblaciones (como la obtención de ciudadanías o residencias permanentes en países de acogida) o una estabilización forzada de los flujos tras los desplazamientos masivos iniciales de años anteriores.
+
+### Desplazamientos internos forzosos
+
+Los desplazamientos internos forzosos también son una consecuencia grave de los conflictos, ya que obligan a millones de personas a huir de la violencia, desarticulando comunidades y creando una presión humanitaria extrema dentro de sus propios países. Estas poblaciones quedan a menudo en una situación de vulnerabilidad total, sin hogar y con un acceso limitado a servicios básicos.
+
+```{r}
+desplazados_internos <-  rio::import("./datos/IDMC_Internal_Displacement.xlsx")
+
+desplazados_internos2 <- left_join(World_mio, desplazados_internos, by = c("iso_a3" = "ISO3")) |> 
+  filter(iso_a3 != "ATA")
+
+desplazados_internos_3 <- st_as_sf(desplazados_internos2)
+
+ggplot(desplazados_internos_3) + 
+  geom_sf(aes(fill = `Conflict Internal Displacements`), color = "#3D3D3D") + 
+  scale_fill_continuous(palette = "reds", na.value = "lightgrey") + 
+  labs(title = "Desplazados internos por conflicto en 2024", 
+       caption = "Fuente: Internal Displacement Monitoring Centre (IDMC)", 
+       fill = "Total") +
+  coord_sf(datum = NA) + 
+  theme_minimal() + 
+  theme(legend.position = c(0.05, 0.05), 
+    legend.justification = c("left", "bottom"), 
+    legend.title = element_text(size = 8),     
+    legend.text = element_text(size = 8.2),     
+    legend.key.size = unit(0.4, "cm"))
+
+```
+
+Al observar el mapa, destacan tres áreas principales por la intensidad de su color. En primer lugar, la República Democrática del Congo es el país de color más oscuro. Esto indica que es una de las crisis de desplazamiento más graves del mundo, superando los 5 millones de movimientos internos debido a conflictos armados persistentes en el este del país.En segundo lugar, está Sudán. Aparece en un rojo intenso. Desde abril de 2023, la guerra civil entre el ejército y las fuerzas paramilitares ha generado cifras récord de desplazados internos.Por último, también descata Myanmar, en el sudeste asiático, reflejando el recrudecimiento del conflicto interno desde 2021.
+
+------------------------------------------------------------------------
+
+## Tipos de conflictos
+
+En primer lugar, encontramos los conflictos armados tradicionales o de alta intensidad. En estos escenarios, la violencia suele ser ejercida por ejércitos estatales o milicias organizadas que utilizan armamento pesado, bombardeos y tácticas de asedio. Aquí, el ataque al civil se convierte en una herramienta para quebrar la resistencia del bando contrario o para forzar cambios demográficos, lo que explica por qué países como Sudán y la República Democrática del Congo presentan las cifras más altas de desplazamientos internos, superando los 5 millones de personas.
+
+Por otro lado, hay conflictos donde la crisis no proviene de una guerra civil declarada, sino de una violencia interna y criminal crónica. Lo que se suele observar son grupos del crimen organizado ejercen un control territorial que incluye extorsión, asesinatos y amenazas directas a comunidades enteras. Aunque no haya bombardeos aéreos, el miedo constante produce un impacto humanitario equivalente, donde las familias abandonan sus hogares de forma silenciosa pero masiva para escapar del control criminal.Estos conflictos son igualmente alarmantes, puesto que pueden llegar a atacar a civiles con la misma brutalidad o incluso más.
+
+A continuación, un gráfico de los países con más ataques a civiles.
+
+::: {.callout-tip collapse="true" icon="false" title="Explicación código"}
+Para este gráfico me he inspirado en el trabajo que hizo la primera exposición de fítbol, el que puso las banderas. Me gustó la idea. He importado los datos con rio y después he filtrado para quedarme con el top 6. Con mutate añado una columna con el tipo de nombre del país que me va a permintir después pegar la imagen de la bandera con geom_image, puesto que es necesario tener el iso2. Después creo las columnas y para poder poner las banderas, las descargo del link que está puesto.
+:::
+
+```{r}
+#| out-width: 85%
+
+civiles <- rio::import("./datos/ataques_civiles.xlsx")
+
+civiles2 <- civiles |> 
+  filter(YEAR %in% c(1997:2013)) |> 
+  group_by(COUNTRY) |> 
+  summarise(ataques = sum(EVENTS)) |> 
+  slice_max(ataques, n = 5) |> 
+  mutate(iso2 = countrycode(COUNTRY, origin = "country.name", destination = "iso2c") %>% 
+           tolower())
+
+p1 <- ggplot(civiles2, aes(y = reorder(COUNTRY, ataques), x = ataques)) + 
+  geom_col(fill="darkred") + 
+  geom_image(aes(image = paste0("https://flagcdn.com/w40/", iso2, ".png")),
+             size = 0.12, by = "width") +
+  labs(title = "Países con más ataques a civiles",
+         subtitle = "Desde 1997 a 2013", 
+         x = " ", 
+         y = " ") + 
+    theme_minimal()
+
+
+civiles3 <- civiles |> 
+  filter(YEAR %in% c(2014:2025)) |> 
+  group_by(COUNTRY) |> 
+  summarise(ataques = sum(EVENTS)) |> 
+  slice_max(ataques, n = 5) |> 
+  mutate(iso2 = countrycode(COUNTRY, origin = "country.name", destination = "iso2c") %>% 
+           tolower())
+
+
+p2 <- ggplot(civiles3, aes(y = reorder(COUNTRY, ataques), x = ataques)) + 
+  geom_col(fill="darkred") + 
+  geom_image(aes(image = paste0("https://flagcdn.com/w40/", iso2, ".png")),
+             size = 0.15, by = "width") +
+  labs(subtitle = "Desde 2014 a 2025", 
+       x = " ", 
+       y = " ", 
+       caption = "Fuente: ACLED") + 
+  theme_minimal()
+
+p1 / p2
+
+```
+
+Somalia ejemplifica el primer tipo de conflictos. Tras la caída de Siad Barre en 1991, el país se fragmentó en manos de señores de la guerra y grupos como Al-Shabaab. Los ataques a civiles eran masivos porque no existía un gobierno que protegiera a la población, y la comida o la ayuda humanitaria se usaban como armas. El problema continúa hasta hoy, puesto que en la actualidad se considera que hay 2 Estados diferentes dentro de ese país.
+
+México representa el segundo tipo de conflictos. La "Guerra contra el Narco" empezó en 2006, sin embargo, a partir de 2014 la violencia mutó. Los grupos criminales se fragmentaron y empezaron a diversificar sus ataques: ya no solo se mataban entre ellos, sino que empezaron a atacar a civiles para extorsionar, reclutar a jóvenes o vaciar pueblos enterospara controlar rutas de paso.
+
+
+------------------------------------------------------------------------
+
+## Terrorismo
+
+Además de los conflictos armados y la violencia criminal, es de gran relevancia la evolución del terrorismo global entre 1970 y 2020. Durante estas cinco décadas, se observa un incremento significativo de ataques terroristas y violencia dirigida a civiles, impulsada por motivaciones políticas, religiosas o ideológicas. Desde los grupos separatistas y extremistas de los años 70 y 80 hasta organizaciones transnacionales como Al-Qaeda e ISIS en los 2000 y 2010, el terrorismo ha causado miles de muertes, desplazamientos internos y temor generalizado, afectando tanto a países en conflicto como a estados aparentemente estables.
+
+A continuación, un gráfico con los atentados terroristas desde 1970 a 2020.
+
+::: callout
+El mapa es una captura del que he hecho en el Script en el que he ido haciendo la base del trabajo antes de ponerla en el qmd. Me he dado cuenta de que tmap no funciona con qmd bien, por eso lo pongo así.
+:::
+
+::: {.callout-tip collapse="true" icon="false" title="Código"}
+CÓDIGO: basado en el Script CIS del guion_03
+
+library(tmap) terrorismo_datos \<- rio::import("./datos/globalterrorismdb_0522dist.xlsx")
+
+terrorismo \<- terrorismo_datos \|\> select(iyear, city, country, latitude, longitude, region_txt) \|\> mutate(latitude = as.numeric(latitude)) \|\> mutate(longitude = as.numeric(longitude)) \|\> group_by(city, longitude, latitude) \|\> summarise(num_ataques = n()) \|\> ungroup()
+
+terrorismo_sf \<- terrorismo \|\> filter(!is.na(longitude) & !is.na(latitude)) \|\> st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
+
+tmap_mode("view")
+
+qtm(terrorismo_sf, size = "num_ataques", col = "darkred", symbols.title.size = "Ataques terroristas", symbols.id = "city")
+:::
+
+![](./imagenes/Terrorismo.jpg){fig-align="center"}
+
+
+
+------------------------------------------------------------------------
+
+## Pandemia: freno a la violencia política
+
+::: callout
+Simplemente me parece un dato curioso
+:::
+
+Los datos muestran que en 2020 los eventos de violencia política presentan tendencia decreciente, lo que confirma que la pandemia actuó como un freno real en los conflictos. Durante 2020 y gran parte de 2021, las restricciones de movilidad y la crisis sanitaria mundial obligaron a una pausa forzosa, provocando que el volumen de violencia política disminuyera mientras gran parte del mundo permanecía confinado. Sin embargo, este período fue solo un paréntesis temporal, ya que a partir de 2022 la tendencia se vuelve marcadamente creciente, demostrando que el volumen de conflictos no ha dejado de aumentar una vez eliminadas las barreras físicas, acumulando tensiones sociales y geopolíticas que terminaron por estallar con mucha más fuerza (aumenta la escala, el número total). Vemos que desde 2022 hasta 2024 la tendencia mensual es creciente.
+
+Al llegar a 2025, la tendencia se estabiliza, aunque lo hace en la parte más alta de toda la serie histórica. Esto indica que la violencia política ha alcanzado la cúspide, donde los conflictos ya no son eventos aislados, sino que se han vuelto crónicos y constantes en niveles extremadamente elevados. En resumen, lo que comenzó como una tendencia a la baja gracias al parón pandémico derivó en una escalada imparable que duplicó el número de incidentes mensuales, dejando un escenario global en el que la inestabilidad se ha consolidado como norma y se mantiene en cifras récord.
+
+::: {.callout-tip collapse="true" icon="false" title="Explicación código"}
+Para este gráfico he importado los datos con rio. He modificado los datos para obtener lo que quería y para poder representar gráficamente los meses de manera ordenada los he pasadoa factor y he establecido yo un vector que contiene el orden ec¡xacto. Después he hecho un gráfico de líneas y con facet_grid he dividido uno para cada año. Así la tendencia se ve mejor y más clara, puesto que he puesto que cada año tenga su escala en el eje y.
+:::
+
+```{r}
+#| fig-width: 8
+#| fig-height: 6
+
+violencia_pol <- rio::import("./datos/eventos_violencia_politica.xlsx")
+
+violencia_politica <- violencia_pol |> 
+  group_by(YEAR, MONTH) |> 
+  summarise(total_mensual = sum(EVENTS), .groups = "drop") |> 
+  filter(YEAR %in% c(2020:2025)) |> 
+  mutate(MONTH = factor(MONTH,
+                        levels = c("January","February","March","April","May","June",
+                                   "July","August","September","October","November","December")))
+  
+
+ggplot(violencia_politica, aes(x = MONTH, y = total_mensual, group = 1)) + 
+  geom_line(color = "darkred", size = 0.62) + 
+  facet_grid(rows = vars(YEAR), scales = "free_y") + 
+  labs(title = "Eventos de violencia política", 
+       x = " ", 
+       y = "Nº total mundial", 
+       caption = "*Nota: No hay datos en diciembre de 2025\n Fuente: ACLED") +
+  theme(axis.text.x = element_text(size = 8), 
+        axis.text.y = element_text(size = 8)) +
+  theme_minimal()
+
+```
+
+
+------------------------------------------------------------------------
+
+## Conclusión
+
+El análisis de los conflictos bélicos a nivel mundial revela un panorama preocupante: la violencia armada ha alcanzado niveles sin precedentes desde la Segunda Guerra Mundial. Los datos indican que las guerras y los enfrentamientos violentos no solo causan fallecimientos directos, sino también desplazamientos internos masivos y flujos de refugiados, afectando de manera especialmente grave a más de 15 millones de niños en 2023, cifra que probablemente sea aún mayor en la actualidad.
+
+Además, los conflictos actuales trascienden los escenarios tradicionales de guerra entre Estados. Cada vez más, la violencia se manifiesta a través de grupos armados no estatales, milicias étnicas y estructuras criminales, generando impactos humanitarios equivalentes a los de las guerras convencionales. La pandemia de 2020 demostró que incluso una interrupción temporal de la movilidad puede frenar la violencia política, pero esta reducción fue breve; la escalada volvió con fuerza, consolidándose en los últimos años a niveles históricos y crónicos.
+
+En definitiva, los conflictos bélicos y la violencia asociada no solo representan un desafío humanitario inmediato, sino que también plantean riesgos geopolíticos, sociales y económicos a largo plazo. Comprender la complejidad de estos fenómenos y sus múltiples actores es esencial para diseñar estrategias efectivas de prevención, mediación y asistencia internacional, que busquen mitigar las consecuencias devastadoras que estos conflictos generan en todo el mundo.
+
+
+```{r}
+
+ruta <- "https://images.unsplash.com/photo-1679364012495-6aecdff305d8?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+
+imagen_guerra <- meme::meme(img = ruta, 
+           upper = "Panorama alarmante", 
+           size = 1.5, 
+           color = "darkred")
+
+plot(imagen_guerra)
+```
+
+
+------------------------------------------------------------------------
+
+<br>
+
+¡¡ Con esto acabo mi trabajo para BigData !!
+
+<br>
